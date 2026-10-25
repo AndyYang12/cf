@@ -26,6 +26,8 @@ let 启用明文 = true;
 let 启用木马 = false;
 let 启用扩展传输 = false;
 let 传输路径 = '';
+// Trojan 独立 WS 路径（空 = 使用默认 /?ed=2048）
+let 木马路径 = '';
 // 启用ECH功能（true启用，false禁用）
 let 启用加密客户端问候 = false;
 // 自定义DNS服务器（默认：https://223.5.5.5/dns-query）
@@ -55,6 +57,13 @@ const 配置默认值 = {
   ex: 'no',
   ech: 'no',
   tp: '',
+  tpath: '',
+  sType: 'socks5',
+  sHost: '',
+  sPort: '',
+  sUser: '',
+  sPass: '',
+  sTls: 'no',
   customDNS: 'https://223.5.5.5/dns-query',
   customECHDomain: 'cloudflare-ech.com',
   alpn: '',
@@ -110,7 +119,7 @@ function 整理有效配置(配置) {
     ...配置默认值,
     ...配置
   };
-  ['ev', 'et', 'ex', 'ech', 'ena', 'epd', 'epi', 'egi', 'ipv4', 'ipv6', 'ispMobile', 'ispUnicom', 'ispTelecom', 'jk'].forEach(键 => {
+  ['ev', 'et', 'ex', 'ech', 'ena', 'epd', 'epi', 'egi', 'ipv4', 'ipv6', 'ispMobile', 'ispUnicom', 'ispTelecom', 'jk', 'sTls'].forEach(键 => {
     快照[键] = 归一配置开关(快照[键], 是否开启值(配置默认值[键]));
   });
   if (快照.ev === 'no' && 快照.et === 'no' && 快照.ex === 'no') {
@@ -140,6 +149,13 @@ function 获取环境配置快照(环境值 = {}) {
     ex: ['ex', 'EX'],
     ech: ['ech', 'ECH'],
     tp: ['tp', 'TP'],
+    tpath: ['tpath', 'TPATH', 'T_PATH'],
+    sType: ['sType', 'STYPE', 'S_TYPE'],
+    sHost: ['sHost', 'SHOST', 'S_HOST'],
+    sPort: ['sPort', 'SPORT', 'S_PORT'],
+    sUser: ['sUser', 'SUSER', 'S_USER'],
+    sPass: ['sPass', 'SPASS', 'S_PASS'],
+    sTls: ['sTls', 'STLS', 'S_TLS'],
     customDNS: ['customDNS', 'CUSTOMDNS', 'CUSTOM_DNS'],
     customECHDomain: ['customECHDomain', 'CUSTOMECHDOMAIN', 'CUSTOM_ECH_DOMAIN'],
     alpn: ['alpn', 'ALPN'],
@@ -614,6 +630,16 @@ function 解析地址值端口(输入) {
 export default {
   async fetch(请求735, 本地值734, 本地值733) {
     try {
+      // 强制 TLS：HTTP 明文入口一律拒绝（WebSocket 升级在 https/wss 下才会通过）
+      if (请求735.url.indexOf('https://') !== 0 && 请求735.url.indexOf('wss://') !== 0) {
+        return new Response('Only HTTPS is allowed', {
+          status: 403,
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-store'
+          }
+        });
+      }
       const 是否网页套接字 = 请求735.headers.get('Upgrade') === atob('d2Vic29ja2V0');
       const 是否值732 = 请求735.method === 'POST';
       const 请求网址731 = new URL(请求735.url);
@@ -650,6 +676,8 @@ export default {
       const 值回退723 = 获取配置文本值('p', 配置默认值.p, 本地值734.p || 本地值734.P);
       回退地址 = 值回退723 ? 值回退723.trim() : '';
       代理5配置 = 获取配置文本值('s', 配置默认值.s, 本地值734.s || 本地值734.S);
+      const 结构化代理地址 = 组装结构化代理地址(本地值734);
+      if (结构化代理地址) 代理5配置 = 结构化代理地址;
       if (代理5配置) {
         try {
           已解析代理5配置 = 解析代理配置(代理5配置);
@@ -706,12 +734,14 @@ export default {
       启用代理降级 = 值控制711值 === 'no';
       仅走代理 = 值控制711值 === 'only';
       const 值控制710 = 获取配置文本值('dkby', 配置默认值.dkby, 本地值734.dkby || 本地值734.DKBY);
-      禁用非传输层安全 = !!(值控制710 && 值控制710.toLowerCase() === 'yes');
+      // 强制只生成 TLS 节点：任何明文 WS / 80 端口节点都不再输出
+      禁用非传输层安全 = true;
       const 值控制709 = 获取配置文本值('yxby', 配置默认值.yxby, 本地值734.yxby || 本地值734.YXBY);
       禁用优选 = !!(值控制709 && 值控制709.toLowerCase() === 'yes');
       启用明文 = 获取配置开关值('ev', true, 本地值734.ev);
       启用木马 = 获取配置开关值('et', false, 本地值734.et);
       传输路径 = 获取配置文本值('tp', 配置默认值.tp, 本地值734.tp);
+      木马路径 = 规范化木马路径(获取配置文本值('tpath', 配置默认值.tpath, 本地值734.tpath || 本地值734.TPATH || 本地值734.T_PATH));
       启用扩展传输 = 获取配置开关值('ex', false, 本地值734.ex);
       订阅转换接口 = 获取配置文本值('scu', 配置默认值.scu, 本地值734.scu);
       启用优选域名 = 获取配置开关值('epd', true, 本地值734.epd || 本地值734.EPD);
@@ -741,6 +771,16 @@ export default {
       }
       优选地址源 = 获取配置文本值('yxURL', 配置默认值.yxURL, 本地值734.yxURL || 本地值734.YXURL);
       自定义路径 = 获取配置文本值('d', 配置默认值.d, 本地值734.d || 本地值734.D);
+      // 旧版兼容页面的配置表单提交
+      if (请求735.method === 'POST') {
+        const 旧版路径段 = new URL(请求735.url).pathname.split('/').filter(参数值 => 参数值);
+        if (旧版路径段.length === 2 && 旧版路径段[1] === 'legacy-config') {
+          const 提交路径 = 旧版路径段[0];
+          const 清理自定义提交路径 = (自定义路径 && 自定义路径.trim()) ? 自定义路径.trim().replace(/^\/+/, '').replace(/\/+$/, '') : '';
+          const 提交有效 = 清理自定义提交路径 ? 提交路径 === 清理自定义提交路径 : (是否有效格式(提交路径) && 提交路径 === 认证令牌);
+          if (提交有效) return await 处理旧版配置提交(请求735);
+        }
+      }
       const 网址698 = new URL(请求735.url);
       if (网址698.pathname.includes('/api/config')) {
         const 路径部分列表697 = 网址698.pathname.split('/').filter(参数值696 => 参数值696);
@@ -961,6 +1001,16 @@ export default {
           }
         }
         if (网址698.pathname === '/') {
+          // 旧浏览器：返回轻量兼容终端页
+          if (是否旧浏览器(请求735)) {
+            return new Response(生成旧版终端页面(), {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store'
+              }
+            });
+          }
           // 检查是否有自定义首页URL配置
           const 自定义值 = 获取配置值('homepage', 本地值734.homepage || 本地值734.HOMEPAGE);
           if (自定义值 && 自定义值.trim()) {
@@ -3189,7 +3239,7 @@ async function 生成木马链接列表来源源(列表455, 用户454, 工作器
   const 默认安全超文本值 = [443];
   const 默认超文本值 = 禁用非传输层安全 ? [] : [80];
   const 链接列表447 = [];
-  const 网页套接字路径446 = '/?ed=2048';
+  const 网页套接字路径446 = 木马路径 || '/?ed=2048';
   const 密码445 = 传输路径 || 用户454;
   const 制作节点名称444 = 别名命名器450 || 创建值节点命名器(跳过编号451);
   for (const 项目443 of 列表455) {
@@ -3450,7 +3500,7 @@ async function 处理网页套接字请求(请求417) {
           }
         }
         if (启用木马 && 数据396.byteLength >= 56) {
-          const 值结果 = await 解析木马头部(数据396, 认证令牌);
+          const 值结果 = await 解析木马头部(数据396, 传输路径 || 认证令牌);
           if (!值结果.hasError) {
             协议类型 = atob('dHJvamFu');
             const {
@@ -4182,6 +4232,29 @@ function 包装残留套接字(套接字, 残留数据) {
     close: () => 套接字.close()
   };
 }
+// 结构化 SOCKS / HTTP 代理配置 -> 现有单行代理地址
+// 支持 socks5 / socks / http / https，http(s) 可选 TLS
+function 组装结构化代理地址(环境值 = {}) {
+  const 类型原始 = 获取配置文本值('sType', 配置默认值.sType, 环境值.sType || 环境值.STYPE || 环境值.S_TYPE);
+  const 主机 = 获取配置文本值('sHost', 配置默认值.sHost, 环境值.sHost || 环境值.SHOST || 环境值.S_HOST).trim();
+  if (!主机) return '';
+  const 端口 = 获取配置文本值('sPort', 配置默认值.sPort, 环境值.sPort || 环境值.SPORT || 环境值.S_PORT).trim();
+  const 用户名 = 获取配置文本值('sUser', 配置默认值.sUser, 环境值.sUser || 环境值.SUSER || 环境值.S_USER).trim();
+  const 密码 = 获取配置文本值('sPass', 配置默认值.sPass, 环境值.sPass || 环境值.SPASS || 环境值.S_PASS).trim();
+  const 启用TLS = 是否开启值(获取配置文本值('sTls', 配置默认值.sTls, 环境值.sTls || 环境值.STLS || 环境值.S_TLS), false);
+  let 类型 = (类型原始 || 'socks5').toLowerCase();
+  if (类型 === 'socks') 类型 = 'socks5';
+  if (类型 !== 'socks5' && 类型 !== 'http' && 类型 !== 'https') 类型 = 'socks5';
+  if (类型 === 'http' && 启用TLS) 类型 = 'https';
+  const 认证部分 = 用户名 ? 用户名 + ':' + 密码 + '@' : '';
+  return 类型 + '://' + 认证部分 + 主机 + (端口 ? ':' + 端口 : '');
+}
+// 统一 Trojan WS 路径格式
+function 规范化木马路径(值) {
+  const 文本 = String(值 || '').trim();
+  if (!文本) return '';
+  return 文本.charAt(0) === '/' ? 文本 : '/' + 文本;
+}
 function 解析代理配置(地址249) {
   let 剩余地址 = String(地址249 || '').trim();
   // 按前缀识别代理种类，无前缀保持原有行为（套接字5）
@@ -4229,8 +4302,208 @@ function 解析代理配置(地址249) {
     kind: 代理种类
   };
 }
+function 是否旧浏览器(请求) {
+  const 代理头 = String(请求.headers.get('User-Agent') || '').toLowerCase();
+  if (!代理头) return false;
+  // IE9 / IE10 / IE11（Trident）
+  if (代理头.indexOf('msie ') >= 0 || 代理头.indexOf('trident/') >= 0) return true;
+  // Android WebView 2.3 ~ 4.3（Chromium 内核之前）
+  const 安卓版本 = 代理头.match(/android\s+([0-9.]+)/);
+  if (安卓版本) {
+    const 版本号 = parseFloat(安卓版本[1]);
+    if (版本号 && 版本号 < 4.4) return true;
+    if (代理头.indexOf('chrome/') < 0) return true;
+  }
+  return false;
+}
+function 转义网页文本(值) {
+  return String(值 === undefined || 值 === null ? '' : 值)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function 取订阅基础路径() {
+  const 清理路径 = String(自定义路径 || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  return '/' + (清理路径 || 认证令牌);
+}
+function 生成开关下拉(名称, 当前值, 默认开启) {
+  const 开启 = 是否开启值(当前值, 默认开启);
+  return '<select name="' + 名称 + '">' +
+    '<option value="yes"' + (开启 ? ' selected' : '') + '>开启</option>' +
+    '<option value="no"' + (!开启 ? ' selected' : '') + '>关闭</option>' +
+    '</select>';
+}
+function 旧版页面样式() {
+  return '<style type="text/css">' +
+    'body{font-family:Arial,Helvetica,sans-serif;background:#f5f6f8;color:#222;margin:0;padding:12px;font-size:14px;line-height:1.5;}' +
+    'h1{font-size:18px;margin:0 0 6px 0;color:#1d4f91;}' +
+    'h2{font-size:15px;margin:18px 0 8px 0;color:#1d4f91;border-left:4px solid #1d4f91;padding-left:8px;}' +
+    'table{border-collapse:collapse;width:100%;background:#fff;border:1px solid #b8c2cc;}' +
+    'td,th{border:1px solid #cfd6de;padding:6px;text-align:left;vertical-align:middle;}' +
+    'th{background:#e9eef5;font-weight:bold;}' +
+    'input[type=text],select{width:100%;padding:5px;border:1px solid #999;font-size:14px;}' +
+    'input[readonly]{background:#f2f2f2;}' +
+    '.btn{display:inline-block;padding:8px 18px;background:#1d4f91;color:#fff;border:0;font-size:14px;cursor:pointer;}' +
+    '.note{color:#666;font-size:12px;margin:6px 0;}' +
+    '.ok{color:#1a7f37;font-weight:bold;}' +
+    '.warn{color:#b35900;font-weight:bold;}' +
+    '</style>';
+}
+function 旧版页面头部(标题) {
+  return '<!DOCTYPE html><html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">' +
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>' + 转义网页文本(标题) + '</title>' + 旧版页面样式() + '</head><body>';
+}
+// 旧浏览器终端页：纯 ES5 + CSS2，无 Matrix 动画
+function 生成旧版终端页面() {
+  const 清理路径 = String(自定义路径 || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  let 主体 = '';
+  if (清理路径) {
+    主体 = '<p>当前已启用自定义路径模式，请直接访问：</p>' +
+      '<p><a href="/' + 转义网页文本(清理路径) + '">/' + 转义网页文本(清理路径) + '</a></p>';
+  } else {
+    主体 = '<p class="note">输入部署时配置的 UUID（环境变量 u）进入管理页。</p>' +
+      '<form onsubmit="return submitUuid();" action="/">' +
+      '<table><tr><td style="width:90px;">UUID</td>' +
+      '<td><input type="text" id="uuid" name="uuid" autocomplete="off" style="width:100%;"></td></tr></table>' +
+      '<p><button type="submit" class="btn">进入</button></p>' +
+      '</form>' +
+      '<script type="text/javascript">' +
+      'function submitUuid(){var v=document.getElementById("uuid").value;if(!v){alert("请输入 UUID");return false;}' +
+      'window.location.href="/"+encodeURIComponent(v);return false;}' +
+      '</script>';
+  }
+  return 旧版页面头部('节点管理 - 兼容模式') +
+    '<h1>节点管理</h1>' +
+    '<p class="note">Android WebView 2.3+ / IE9+ 兼容页面</p>' + 主体 +
+    '</body></html>';
+}
+// 旧浏览器订阅/配置页：服务端渲染，保存走普通表单 POST
+function 生成旧版订阅页面(请求) {
+  const 配置 = 获取有效配置快照();
+  const 基础路径 = 取订阅基础路径();
+  const 基址 = new URL(请求.url).origin + 基础路径;
+  const 地区 = 当前工作器地区 || 'CF';
+  const 木马密码 = 配置.tp || 认证令牌;
+  const 结构化代理 = 组装结构化代理地址();
+  const 实际代理 = 结构化代理 || 配置.s || '';
+  const 代理状态 = 实际代理 ? '<span class="ok">已配置</span>（' + 转义网页文本(实际代理) + '）' : '<span class="warn">未配置</span>';
+  const KV状态 = 键值存储 ? '<span class="ok">已启用</span>' : '<span class="warn">未配置（无法保存配置）</span>';
+  const 订阅项 = [
+    ['v2rayN / 通用 Base64', 基址 + '/sub?target=v2ray'],
+    ['Clash / Clash Meta', 基址 + '/sub?target=clash'],
+    ['Sing-box', 基址 + '/sub?target=singbox'],
+    ['Surge', 基址 + '/sub?target=surge'],
+    ['Loon', 基址 + '/sub?target=loon'],
+    ['Quantumult X', 基址 + '/sub?target=quantx'],
+    ['家宽链式', 基址 + '/sub?target=jk']
+  ];
+  let 订阅行 = '';
+  订阅项.forEach(项 => {
+    订阅行 += '<tr><td style="width:42%;">' + 转义网页文本(项[0]) + '</td>' +
+      '<td><input type="text" readonly value="' + 转义网页文本(项[1]) + '"></td></tr>';
+  });
+  const 配置表单 = 键值存储 ?
+    '<form method="post" action="' + 基础路径 + '/legacy-config">' +
+    '<table>' +
+    '<tr><th colspan="2">基础配置</th></tr>' +
+    '<tr><td style="width:38%;">Worker 地区 (wk)</td><td><input type="text" name="wk" value="' + 转义网页文本(配置.wk) + '"></td></tr>' +
+    '<tr><td>自定义路径 (d)</td><td><input type="text" name="d" value="' + 转义网页文本(配置.d) + '"></td></tr>' +
+    '<tr><td>ProxyIP (p)</td><td><input type="text" name="p" value="' + 转义网页文本(配置.p) + '"></td></tr>' +
+    '<tr><td>优选 IP (yx)</td><td><input type="text" name="yx" value="' + 转义网页文本(配置.yx) + '"></td></tr>' +
+    '<tr><th colspan="2">协议配置</th></tr>' +
+    '<tr><td>VLESS 明文 (ev)</td><td>' + 生成开关下拉('ev', 配置.ev, true) + '</td></tr>' +
+    '<tr><td>Trojan (et)</td><td>' + 生成开关下拉('et', 配置.et, false) + '</td></tr>' +
+    '<tr><td>Trojan 密码 (tp)</td><td><input type="text" name="tp" value="' + 转义网页文本(配置.tp) + '"><div class="note">留空则使用 UUID</div></td></tr>' +
+    '<tr><td>Trojan 路径 (tpath)</td><td><input type="text" name="tpath" value="' + 转义网页文本(配置.tpath) + '"><div class="note">例如 /trojan，留空使用 /?ed=2048</div></td></tr>' +
+    '<tr><td>xhttp 扩展传输 (ex)</td><td>' + 生成开关下拉('ex', 配置.ex, false) + '</td></tr>' +
+    '<tr><th colspan="2">SOCKS / HTTP 上游代理</th></tr>' +
+    '<tr><td>类型 (sType)</td><td><select name="sType">' +
+      '<option value="socks5"' + (配置.sType === 'socks5' ? ' selected' : '') + '>socks5</option>' +
+      '<option value="http"' + (配置.sType === 'http' ? ' selected' : '') + '>http</option>' +
+      '<option value="https"' + (配置.sType === 'https' ? ' selected' : '') + '>https</option>' +
+      '</select></td></tr>' +
+    '<tr><td>主机 (sHost)</td><td><input type="text" name="sHost" value="' + 转义网页文本(配置.sHost) + '"></td></tr>' +
+    '<tr><td>端口 (sPort)</td><td><input type="text" name="sPort" value="' + 转义网页文本(配置.sPort) + '"></td></tr>' +
+    '<tr><td>用户名 (sUser)</td><td><input type="text" name="sUser" value="' + 转义网页文本(配置.sUser) + '"></td></tr>' +
+    '<tr><td>密码 (sPass)</td><td><input type="text" name="sPass" value="' + 转义网页文本(配置.sPass) + '"></td></tr>' +
+    '<tr><td>代理 TLS (sTls)</td><td>' + 生成开关下拉('sTls', 配置.sTls, false) + '<div class="note">仅 http 类型会切换为 https</div></td></tr>' +
+    '<tr><td>单行代理 URL (s)</td><td><input type="text" name="s" value="' + 转义网页文本(配置.s) + '"><div class="note">user:pass@host:port 或 http://host:port，填写后优先生效</div></td></tr>' +
+    '<tr><th colspan="2">高级</th></tr>' +
+    '<tr><td>订阅转换接口 (scu)</td><td><input type="text" name="scu" value="' + 转义网页文本(配置.scu) + '"></td></tr>' +
+    '<tr><td>自定义首页 (homepage)</td><td><input type="text" name="homepage" value="' + 转义网页文本(配置.homepage) + '"></td></tr>' +
+    '<tr><td>自定义 DNS</td><td><input type="text" name="customDNS" value="' + 转义网页文本(配置.customDNS) + '"></td></tr>' +
+    '</table>' +
+    '<p><button type="submit" class="btn">保存配置</button></p>' +
+    '<p class="note">保存后立即生效；如修改了自定义路径，页面会跳转到新路径。</p>' +
+    '</form>'
+    : '<p class="warn">未绑定 KV 存储，配置只能通过环境变量修改。</p>';
+  return 旧版页面头部('节点订阅 - 兼容模式') +
+    '<h1>节点订阅</h1>' +
+    '<p class="note">Android WebView 2.3+ / IE9+ 兼容页面，配置通过表单提交。</p>' +
+    '<h2>系统状态</h2>' +
+    '<table>' +
+    '<tr><td style="width:38%;">Worker 地区</td><td>' + 转义网页文本(地区) + '</td></tr>' +
+    '<tr><td>访问方式</td><td>' + (配置.d ? '自定义路径' : 'UUID') + '</td></tr>' +
+    '<tr><td>TLS 加密</td><td><span class="ok">已强制开启</span>（只生成 TLS 端口节点，HTTP 访问被拒绝）</td></tr>' +
+    '<tr><td>KV 存储</td><td>' + KV状态 + '</td></tr>' +
+    '<tr><td>Trojan</td><td>' + (配置.et === 'yes' ? '<span class="ok">已开启</span>，密码：' + 转义网页文本(木马密码) + '，路径：' + 转义网页文本(木马路径 || '/?ed=2048') : '未开启') + '</td></tr>' +
+    '<tr><td>SOCKS / HTTP 上游</td><td>' + 代理状态 + '</td></tr>' +
+    '</table>' +
+    '<h2>订阅地址</h2>' +
+    '<p class="note">在客户端中选择对应格式添加订阅；旧浏览器可直接长按/全选复制。</p>' +
+    '<table>' + 订阅行 + '</table>' +
+    '<h2>配置管理</h2>' + 配置表单 +
+    '</body></html>';
+}
+async function 处理旧版配置提交(请求) {
+  if (!键值存储) {
+    return new Response('KV 存储未配置，无法保存配置。', {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8'
+      }
+    });
+  }
+  const 表单 = await 请求.formData();
+  const 允许键 = ['wk', 'd', 'p', 'yx', 'yxURL', 'ev', 'et', 'ex', 'tp', 'tpath', 'sType', 'sHost', 'sPort', 'sUser', 'sPass', 'sTls', 's', 'scu', 'homepage', 'customDNS'];
+  允许键.forEach(键 => {
+    if (!表单.has(键)) return;
+    const 值 = String(表单.get(键) || '').trim();
+    if (值 === '') {
+      delete 键值配置[键];
+    } else {
+      键值配置[键] = 值;
+    }
+  });
+  await 保存键值配置();
+  更新配置值();
+  if (键值配置.yx) 更新自定义优选来源值();
+  const 新路径 = 取订阅基础路径();
+  const 跳转地址 = new URL(请求.url).origin + 新路径;
+  return new Response(null, {
+    status: 303,
+    headers: {
+      'Location': 跳转地址,
+      'Cache-Control': 'no-store'
+    }
+  });
+}
 async function 处理订阅值(请求241, 用户240 = null) {
   if (!用户240) 用户240 = 认证令牌;
+  // 旧内核浏览器直接返回 ES5/CSS2 兼容页面
+  if (是否旧浏览器(请求241)) {
+    return new Response(生成旧版订阅页面(请求241), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+      }
+    });
+  }
   const 网址239 = new URL(请求241.url);
   // 优先检查Cookie中的语言设置
   const 凭据头部 = 请求241.headers.get('Cookie') || '';
@@ -5638,6 +5911,15 @@ async function 处理订阅值(请求241, 用户240 = null) {
                                         <label style="display: block; margin-bottom: 8px; color: #00f0ff; font-size: 0.95rem;">${翻译值.altPassword}</label>
                                         <input type="text" id="tp" placeholder="${翻译值.altPasswordPlaceholder}" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
                                         <small style="color: #7aa9c4; font-size: 0.8rem; display: block; margin-top: 5px;">${翻译值.altPasswordHint}</small>
+                                        <div style="margin-top: 12px;">
+                                            <label style="display: block; margin-bottom: 8px; color: #00f0ff; font-size: 0.95rem;">Trojan 路径 (tpath)</label>
+                                            <input type="text" id="tpath" placeholder="/trojan（留空使用 /?ed=2048）" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                            <small style="color: #7aa9c4; font-size: 0.8rem; display: block; margin-top: 5px;">Trojan 独立 WS 路径，只影响 Trojan 订阅节点。</small>
+                                        </div>
+                                        <div style="margin-top: 12px;">
+                                            <label style="display: block; margin-bottom: 8px; color: #00f0ff; font-size: 0.95rem;">TLS 加密</label>
+                                            <div style="padding: 8px 10px; background: rgba(0, 255, 157, 0.12); border: 1px solid #00ff9d; color: #00ff9d; font-size: 0.85rem;">已强制开启：订阅只生成 TLS 节点，HTTP 明文入口会被拒绝。</div>
+                                        </div>
                                 </div>
                                     <small style="color: #7aa9c4; font-size: 0.85rem; display: block; margin-top: 10px;">${翻译值.protocolHint}</small>
                             </div>
@@ -5744,6 +6026,45 @@ async function 处理订阅值(请求241, 用户240 = null) {
                                 <label style="display: block; margin-bottom: 8px; color: #00f0ff; font-weight: bold; text-shadow: 0 0 3px #00f0ff;">${翻译值.socks5Config}</label>
                                 <input type="text" id="socksConfig" placeholder="${是否值236 ? 解码64('2YXYq9in2YQ6IHVzZXI6cGFzc0Bob3N0OnBvcnQg24zYpyBodHRwOi8vdXNlcjpwYXNzQGhvc3Q6cG9ydA==') : 解码64('5L6L5aaCOiB1c2VyOnBhc3NAaG9zdDpwb3J0IOaIliBodHRwOi8vdXNlcjpwYXNzQGhvc3Q6cG9ydA==')}" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 14px;">
                                 <small style="color: #7aa9c4; font-size: 0.85rem;">${是否值236 ? 解码64('2KLYr9ix2LMg2b7YsdmI2qnYs9uMINiu2LHZiNis24wg2KjYsdin24wg2KfZhtiq2YLYp9mEINiq2YXYp9mFINiq2LHYp9mB24zaqSDYrtix2YjYrNuMLiDYqNiv2YjZhiDZvtuM2LTZiNmG2K8g2KjZhyDYtdmI2LHYqiBzNSDYr9ixINmG2LjYsSDar9ix2YHYqtmHINmF24zigIzYtNmI2K8=') : 解码64('5Ye656uZ5Luj55CG5Zyw5Z2A77yM55So5LqO6L2s5Y+R5omA5pyJ5Ye656uZ5rWB6YeP44CC5LiN5YaZ5YmN57yA6buY6K6k5oyJIHM1IOWkhOeQhg==')}</small>
+                                <div style="margin-top: 15px; padding: 15px; background: rgba(15, 3, 40, 0.6); border: 1px solid #00f0ff; border-radius: 5px;">
+                                    <label style="display: block; margin-bottom: 10px; color: #00f0ff; font-weight: bold;">结构化 SOCKS / HTTP 上游（填写主机后覆盖上面的单行配置）</label>
+                                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                        <div style="width: 140px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">类型 (sType)</label>
+                                            <select id="sType" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                                <option value="socks5">socks5</option>
+                                                <option value="http">http</option>
+                                                <option value="https">https</option>
+                                            </select>
+                                        </div>
+                                        <div style="flex: 1; min-width: 150px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">主机 (sHost)</label>
+                                            <input type="text" id="sHost" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        </div>
+                                        <div style="width: 100px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">端口 (sPort)</label>
+                                            <input type="text" id="sPort" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                                        <div style="flex: 1; min-width: 120px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">用户名 (sUser)</label>
+                                            <input type="text" id="sUser" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        </div>
+                                        <div style="flex: 1; min-width: 120px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">密码 (sPass)</label>
+                                            <input type="text" id="sPass" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        </div>
+                                        <div style="width: 120px;">
+                                            <label style="display: block; margin-bottom: 5px; color: #7aa9c4; font-size: 0.85rem;">代理 TLS</label>
+                                            <select id="sTls" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00f0ff; color: #00f0ff; font-family: 'Courier New', monospace; font-size: 13px;">
+                                                <option value="no">关闭</option>
+                                                <option value="yes">开启</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <small style="color: #7aa9c4; font-size: 0.8rem; display: block; margin-top: 8px;">TLS 仅对 http 类型生效（等价于 https://）。用户名/密码中不要包含 @ 或 :。</small>
+                                </div>
                         </div>
                     </form>
 
@@ -6671,6 +6992,13 @@ function 应用配置到界面(配置) {
   写入开关值('ex', 配置.ex, false);
   写入开关值('ech', 配置.ech, false);
   写入字段值('tp', 配置.tp);
+  写入字段值('tpath', 配置.tpath);
+  写入字段值('sType', 配置.sType || 'socks5');
+  写入字段值('sHost', 配置.sHost);
+  写入字段值('sPort', 配置.sPort);
+  写入字段值('sUser', 配置.sUser);
+  写入字段值('sPass', 配置.sPass);
+  写入字段值('sTls', 配置.sTls === 'yes' ? 'yes' : 'no');
   写入字段值('customDNS', 配置.customDNS);
   写入字段值('customECHDomain', 配置.customECHDomain);
   写入字段值('alpn', 配置.alpn);
@@ -6709,6 +7037,13 @@ function 收集界面配置() {
     ex: 读取开关值('ex', false),
     ech: 读取开关值('ech', false),
     tp: 读取字段值('tp'),
+    tpath: 读取字段值('tpath'),
+    sType: 读取字段值('sType') || 'socks5',
+    sHost: 读取字段值('sHost'),
+    sPort: 读取字段值('sPort'),
+    sUser: 读取字段值('sUser'),
+    sPass: 读取字段值('sPass'),
+    sTls: 读取字段值('sTls') || 'no',
     customDNS: 读取字段值('customDNS'),
     customECHDomain: 读取字段值('customECHDomain'),
     alpn: 读取字段值('alpn'),
@@ -7483,7 +7818,13 @@ document.addEventListener('DOMContentLoaded', function () {
           customIP: document.getElementById('customIP').value,
           yx: 新值20022,
           yxURL: document.getElementById('yxURL').value,
-          s: document.getElementById('socksConfig').value
+          s: document.getElementById('socksConfig').value,
+          sType: document.getElementById('sType').value,
+          sHost: document.getElementById('sHost').value,
+          sPort: document.getElementById('sPort').value,
+          sUser: document.getElementById('sUser').value,
+          sPass: document.getElementById('sPass').value,
+          sTls: document.getElementById('sTls').value
         };
         await 保存配置(配置数据20021);
         显示状态('${是否值236 ? 'موفقیت‌آمیز بود' : '已覆盖'} ' + 已选项目列表20024.length + ' ${是否值236 ? 'مورد و ذخیره شد' : '项并已保存'}', 'success');
@@ -7515,7 +7856,13 @@ document.addEventListener('DOMContentLoaded', function () {
           customIP: document.getElementById('customIP').value,
           yx: 新值,
           yxURL: document.getElementById('yxURL').value,
-          s: document.getElementById('socksConfig').value
+          s: document.getElementById('socksConfig').value,
+          sType: document.getElementById('sType').value,
+          sHost: document.getElementById('sHost').value,
+          sPort: document.getElementById('sPort').value,
+          sUser: document.getElementById('sUser').value,
+          sPass: document.getElementById('sPass').value,
+          sTls: document.getElementById('sTls').value
         };
         await 保存配置(配置数据);
         显示状态('${是否值236 ? 'موفقیت‌آمیز بود' : '已追加'} ' + 已选项目列表.length + ' ${是否值236 ? 'مورد و ذخیره شد' : '项并已保存'}', 'success');
@@ -8780,7 +9127,7 @@ async function 生成木马链接列表来源新地址列表(列表, 用户, 工
   const 云墙超文本端口 = [80, 8080, 8880, 2052, 2082, 2086, 2095];
   const 云墙安全超文本端口 = [443, 2053, 2083, 2087, 2096, 8443];
   const 链接列表 = [];
-  const 网页套接字路径 = '/?ed=2048';
+  const 网页套接字路径 = 木马路径 || '/?ed=2048';
   const 密码 = 传输路径 || 用户;
   const 制作节点名称 = 别名命名器 || 创建值节点命名器(跳过编号);
   for (const 项目62 of 列表) {
@@ -9121,6 +9468,7 @@ function 更新配置值() {
   启用木马 = 有效配置.et === 'yes';
   启用扩展传输 = 有效配置.ex === 'yes';
   传输路径 = 有效配置.tp || '';
+  木马路径 = 规范化木马路径(有效配置.tpath || '');
   订阅转换接口 = 有效配置.scu || 配置默认值.scu;
   启用优选域名 = 有效配置.epd === 'yes';
   启用优选地址 = 有效配置.epi === 'yes';
@@ -9131,7 +9479,7 @@ function 更新配置值() {
   自定义域名系统 = 有效配置.customDNS || 配置默认值.customDNS;
   自定义加密客户端问候域名 = 有效配置.customECHDomain || 配置默认值.customECHDomain;
   自定义应用层协议协商 = 规范化应用层协议协商(有效配置.alpn || '');
-  禁用非传输层安全 = 有效配置.dkby === 'yes' || 启用加密客户端问候;
+  禁用非传输层安全 = true;
   const 降级控制值 = (有效配置.qj || '').toLowerCase();
   启用代理降级 = 降级控制值 === 'no';
   仅走代理 = 降级控制值 === 'only';
@@ -9139,6 +9487,8 @@ function 更新配置值() {
   优选地址源 = 有效配置.yxURL || '';
   回退地址 = 有效配置.p ? 有效配置.p.trim() : '';
   代理5配置 = 有效配置.s || '';
+  const 结构化代理地址 = 组装结构化代理地址();
+  if (结构化代理地址) 代理5配置 = 结构化代理地址;
   if (代理5配置) {
     try {
       已解析代理5配置 = 解析代理配置(代理5配置);
