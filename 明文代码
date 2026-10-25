@@ -53,8 +53,8 @@ let 键值配置版本 = '';
 const 配置默认值 = {
   wk: '',
   ev: 'yes',
-  et: 'no',
-  ex: 'no',
+  et: 'yes',
+  ex: 'yes',
   ech: 'no',
   tp: '',
   tpath: '',
@@ -74,7 +74,7 @@ const 配置默认值 = {
   s: '',
   homepage: '',
   scu: 解码64('aHR0cHM6Ly91cmwudjEubWsvc3Vi'),
-  ena: 'no',
+  ena: 'yes',
   epd: 'yes',
   epi: 'yes',
   egi: 'yes',
@@ -339,6 +339,17 @@ const 直连域名列表 = [{
   domain: "cf.877771.xyz"
 }, {
   domain: "xn--b6gac.eu.org"
+}, {
+  // 合并自 crazykay.dev 订阅：原部署的自定义优选域名
+  domain: "saas.sin.fan",
+  name: "加入频道@kejiland00"
+}, {
+  // 合并自 crazykay.dev 订阅：原部署的自定义优选地址
+  domain: "38.246.73.124",
+  name: "US"
+}, {
+  domain: "8.220.134.136",
+  name: "SG"
 }];
 const 错误_无效数据 = atob('aW52YWxpZCBkYXRh');
 const 错误_无效用户 = atob('aW52YWxpZCB1c2Vy');
@@ -739,15 +750,15 @@ export default {
       const 值控制709 = 获取配置文本值('yxby', 配置默认值.yxby, 本地值734.yxby || 本地值734.YXBY);
       禁用优选 = !!(值控制709 && 值控制709.toLowerCase() === 'yes');
       启用明文 = 获取配置开关值('ev', true, 本地值734.ev);
-      启用木马 = 获取配置开关值('et', false, 本地值734.et);
+      启用木马 = 获取配置开关值('et', true, 本地值734.et);
       传输路径 = 获取配置文本值('tp', 配置默认值.tp, 本地值734.tp);
       木马路径 = 规范化木马路径(获取配置文本值('tpath', 配置默认值.tpath, 本地值734.tpath || 本地值734.TPATH || 本地值734.T_PATH));
-      启用扩展传输 = 获取配置开关值('ex', false, 本地值734.ex);
+      启用扩展传输 = 获取配置开关值('ex', true, 本地值734.ex);
       订阅转换接口 = 获取配置文本值('scu', 配置默认值.scu, 本地值734.scu);
       启用优选域名 = 获取配置开关值('epd', true, 本地值734.epd || 本地值734.EPD);
       启用优选地址 = 获取配置开关值('epi', true, 本地值734.epi || 本地值734.EPI);
       启用仓库优选 = 获取配置开关值('egi', true, 本地值734.egi || 本地值734.EGI);
-      启用原生地址 = 获取配置开关值('ena', false, 本地值734.ena || 本地值734.ENA);
+      启用原生地址 = 获取配置开关值('ena', true, 本地值734.ena || 本地值734.ENA);
       启用家宽链式 = 获取配置开关值('jk', false, 本地值734.jk || 本地值734.JK);
       启用加密客户端问候 = 获取配置开关值('ech', false, 本地值734.ech || 本地值734.ECH);
 
@@ -3068,10 +3079,21 @@ async function 处理订阅请求(请求507, 用户506, 网址505 = null) {
       }
     }
   }
+  // 合并去重：同一 协议 + 主机端口 + 传输方式 + 安全方式 + 路径 只保留第一个节点
+  const 去重键集合 = new Set();
+  const 去重后列表 = [];
+  最终链接列表.forEach(链接 => {
+    const 键 = 生成节点去重键(链接);
+    if (去重键集合.has(键)) return;
+    去重键集合.add(键);
+    去重后列表.push(链接);
+  });
+  最终链接列表.length = 0;
+  最终链接列表.push(...去重后列表);
   if (最终链接列表.length === 0) {
     const 错误备注 = "所有节点获取失败";
     const 协议484 = atob('dmxlc3M=');
-    const 错误链接 = `${协议484}://00000000-0000-0000-0000-000000000000@127.0.0.1:80?encryption=none&security=none&type=ws&host=error.com&path=%2F#${encodeURIComponent(错误备注)}`;
+    const 错误链接 = `${协议484}://00000000-0000-0000-0000-000000000000@127.0.0.1:443?encryption=none&security=tls&type=ws&host=error.com&path=%2F#${encodeURIComponent(错误备注)}`;
     最终链接列表.push(错误链接);
   }
   let 订阅内容;
@@ -4254,6 +4276,25 @@ function 规范化木马路径(值) {
   const 文本 = String(值 || '').trim();
   if (!文本) return '';
   return 文本.charAt(0) === '/' ? 文本 : '/' + 文本;
+}
+// 节点去重键：忽略备注名，只比对协议、主机端口、传输方式、安全方式、路径
+function 生成节点去重键(链接) {
+  const 文本 = String(链接 || '');
+  const 协议分隔 = 文本.indexOf('://');
+  if (协议分隔 < 0) return 文本;
+  const 协议 = 文本.slice(0, 协议分隔).toLowerCase();
+  let 剩余 = 文本.slice(协议分隔 + 3);
+  const 井号位置 = 剩余.indexOf('#');
+  if (井号位置 >= 0) 剩余 = 剩余.slice(0, 井号位置);
+  const 问号位置 = 剩余.indexOf('?');
+  const 地址部分 = 问号位置 >= 0 ? 剩余.slice(0, 问号位置) : 剩余;
+  const 参数部分 = 问号位置 >= 0 ? 剩余.slice(问号位置 + 1) : '';
+  const 主机端口 = 地址部分.slice(地址部分.lastIndexOf('@') + 1).toLowerCase();
+  const 查询 = new URLSearchParams(参数部分);
+  const 传输类型 = (查询.get('type') || 'ws').toLowerCase();
+  const 安全方式 = (查询.get('security') || '').toLowerCase();
+  const 路径 = 查询.get('path') || '';
+  return [协议, 主机端口, 传输类型, 安全方式, 路径].join('|');
 }
 function 解析代理配置(地址249) {
   let 剩余地址 = String(地址249 || '').trim();
